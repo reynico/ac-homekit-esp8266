@@ -5,11 +5,15 @@
 #include <IRremoteESP8266.h>
 #include <IRsend.h>
 #include <ir_Whirlpool.h>
+#include <DHT.h>
+
 
 #define LOG_D(fmt, ...)   printf_P(PSTR(fmt "\n") , ##__VA_ARGS__);
 
 const uint16_t kIrLed = 15; // D4
 IRWhirlpoolAc ac(kIrLed);
+
+DHT dht (5, DHT22);
 
 // Globals
 bool queueCommand = false;
@@ -20,6 +24,7 @@ void flipQueueCommand(bool newState) {
 
 void setup() {
   Serial.begin(115200);
+  dht.begin();
   wifi_connect();
   // homekit_storage_reset(); // to remove the previous HomeKit pairing storage when you first run this new HomeKit example
   my_homekit_setup();
@@ -42,7 +47,6 @@ void loop() {
 
 // defined in my_accessory.c
 extern "C" homekit_server_config_t config;
-
 extern "C" homekit_characteristic_t cooler_active;
 extern "C" homekit_characteristic_t current_temp;
 extern "C" homekit_characteristic_t current_state;
@@ -52,6 +56,8 @@ extern "C" homekit_characteristic_t cooling_threshold;
 extern "C" homekit_characteristic_t heating_threshold;
 
 static uint32_t next_heap_millis = 0;
+static uint32_t next_report_millis = 0;
+
 
 // --- Setters
 void cooler_active_setter(const homekit_value_t value) {
@@ -65,6 +71,13 @@ void cooler_active_setter(const homekit_value_t value) {
     LOG_D("As the AC is not active anymore, set off to true.")
   }
   flipQueueCommand(true);
+}
+
+void report() {
+  float temperature_value = dht.readTemperature();
+	current_temp.value.float_value = temperature_value;
+	LOG_D("Current temperature: %.1f", temperature_value);
+	homekit_characteristic_notify(&current_temp, current_temp.value);
 }
 
 void current_state_setter(const homekit_value_t value) {
@@ -190,4 +203,9 @@ void my_homekit_loop() {
         ESP.getFreeHeap(), arduino_homekit_connected_clients_count());
 
   }
+    if (t > next_report_millis) {
+		// report sensor values every 10 seconds
+		next_report_millis = t + 10 * 1000;
+		report();
+	}
 }
