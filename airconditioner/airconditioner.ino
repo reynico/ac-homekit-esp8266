@@ -6,20 +6,8 @@
 #include <IRsend.h>
 #include <ir_Whirlpool.h>
 
-/*
- *  Modified on: 2021-08-10
- *  Josh Spicer <hello@joshspicer.com>
- *  Writeup: http://spcr.me/aircon-homekit
- *      
- *  Built with the following libraries:
- *     https://github.com/Mixiaoxiao/Arduino-HomeKit-ESP8266 
- *     https://github.com/crankyoldgit/IRremoteESP8266
- *
- */
-
 #define LOG_D(fmt, ...)   printf_P(PSTR(fmt "\n") , ##__VA_ARGS__);
 
-// IR settings
 const uint16_t kIrLed = 15; // D4
 IRWhirlpoolAc ac(kIrLed);
 
@@ -61,6 +49,7 @@ extern "C" homekit_characteristic_t current_state;
 extern "C" homekit_characteristic_t target_state;
 extern "C" homekit_characteristic_t rotation_speed;
 extern "C" homekit_characteristic_t cooling_threshold;
+extern "C" homekit_characteristic_t heating_threshold;
 
 static uint32_t next_heap_millis = 0;
 
@@ -76,10 +65,6 @@ void cooler_active_setter(const homekit_value_t value) {
     LOG_D("As the AC is not active anymore, set off to true.")
   }
   flipQueueCommand(true);
-}
-
-void current_temp_setter(const homekit_value_t value) {
-  LOG_D("NO_OP: current_temp_setter Got value %d", value.float_value);
 }
 
 void current_state_setter(const homekit_value_t value) {
@@ -182,7 +167,6 @@ void my_homekit_setup() {
   //and I have no reason to modify this "feature".
   
   cooler_active.setter = cooler_active_setter;
-  current_temp.setter = current_temp_setter;
   current_state.setter = current_state_setter;
   target_state.setter = target_state_setter;
   rotation_speed.setter = rotation_speed_setter;
