@@ -11,7 +11,7 @@
 const uint16_t kIrLed = 15; // D4
 IRWhirlpoolAc ac(kIrLed);
 
-int powerStatus = 2;
+int powerStatusPin = 12; // D9
 
 DHT dht (5, DHT22);
 
@@ -25,8 +25,7 @@ void flipQueueCommand(bool newState) {
 
 void setup() {
   Serial.begin(115200);
-  pinMode(powerStatus, INPUT);
-  digitalWrite(powerStatus, HIGH);
+  pinMode(powerStatusPin, INPUT_PULLUP);
   dht.begin();
   wifi_connect();
   // homekit_storage_reset(); // to remove the previous HomeKit pairing storage when you first run this new HomeKit example
@@ -38,7 +37,7 @@ void setup() {
 
 void updatePowerStatus() {
   bool isOn = true;
-  isOn = digitalRead(powerStatus);
+  isOn = digitalRead(powerStatusPin);
   if (isOn) {
     off = false;
   } else {
