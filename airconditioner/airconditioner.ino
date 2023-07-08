@@ -8,12 +8,14 @@
 
 #define LOG_D(fmt, ...) printf_P(PSTR(fmt "\n"), ##__VA_ARGS__);
 
-const uint16_t kIrLed = 15; // D4
+const uint16_t kIrLed = 15;  // D4
 IRWhirlpoolAc ac(kIrLed);
 
-int powerStatusPin = 12; // D9
+int powerStatusPin = 12;  // D9
+bool powerCurrentStatus = false;
+bool powerDesiredStatus = false;
 
-DHT dht (5, DHT22);
+DHT dht(5, DHT22);
 
 // Globals
 bool queueCommand = false;
@@ -36,17 +38,14 @@ void setup() {
 }
 
 void updatePowerStatus() {
-  bool isOn = true;
-  isOn = digitalRead(powerStatusPin);
-  if (isOn) {
-    off = false;
-  } else {
-    off = true;
+  powerCurrentStatus = digitalRead(powerStatusPin);
+  LOG_D("AC power is currently: %s, and desired: %s", powerCurrentStatus ? "ON" : "OFF", powerDesiredStatus ? "ON" : "OFF");
+  if (powerCurrentStatus != powerDesiredStatus) {
+    LOG_D("Toggling power");
     ac.setPowerToggle(true);
     ac.send();
     ac.setPowerToggle(false);
   }
-  LOG_D("AC power is: %s", isOn ? "ON" : "OFF");
 }
 
 void loop() {
@@ -54,11 +53,7 @@ void loop() {
   delay(10);
 
   if (queueCommand) {
-    if (off) {
-      LOG_D("AC is OFF, and needs to be turned on. Set setPowerToggle to true")
-      // ac.setPowerToggle(true);
-      // off = false;
-    }
+    updatePowerStatus();
     Serial.write("Sending AC Command...\n");
     ac.send();
     flipQueueCommand(false);
@@ -88,17 +83,17 @@ void cooler_active_setter(const homekit_value_t value) {
   LOG_D("ACTIVE was %s and is now set to %s", oldState ? "ON" : "OFF", state ? "ON" : "OFF");
 
   if (!state && oldState) {
-    LOG_D("As the AC is not active anymore, set off to true.")
-    // off = true;
+    LOG_D("As the AC is not active anymore, call updatePowerStatus()")
+    powerDesiredStatus = false;
   }
   flipQueueCommand(true);
 }
 
 void report() {
   float temperature_value = dht.readTemperature();
-	current_temp.value.float_value = temperature_value;
-	LOG_D("Current temperature: %.1f", temperature_value);
-	homekit_characteristic_notify(&current_temp, current_temp.value);
+  current_temp.value.float_value = temperature_value;
+  LOG_D("Current temperature: %.1f", temperature_value);
+  homekit_characteristic_notify(&current_temp, current_temp.value);
 }
 
 void current_state_setter(const homekit_value_t value) {
@@ -110,7 +105,7 @@ void target_state_setter(const homekit_value_t value) {
   int oldState = target_state.value.int_value;
   int state = value.int_value;
   target_state.value = value;
-  
+
   if (oldState == state) {
     LOG_D("NO_OP: target_state_setter. Got value %d", value.int_value);
     return;
@@ -118,19 +113,22 @@ void target_state_setter(const homekit_value_t value) {
 
   switch (value.int_value) {
     case 0:
-        LOG_D("AC is NOT OFF, but should be OFF. Setting it to OFF")
-        // off = true;
-        LOG_D("target_state_setter: OFF");
+      LOG_D("AC is NOT OFF, but should be OFF. Setting it to OFF")
+      powerDesiredStatus = false;
+      LOG_D("target_state_setter: OFF");
       break;
     case 1073646594:
+      powerDesiredStatus = true;
       ac.setMode(kWhirlpoolAcCool);
       LOG_D("target_state_setter: Cool");
       break;
     case 1073646593:
+      powerDesiredStatus = true;
       ac.setMode(kWhirlpoolAcHeat);
       LOG_D("target_state_setter: Heat");
       break;
     case 1073646592:
+      powerDesiredStatus = true;
       ac.setMode(kWhirlpoolAcAuto);
       LOG_D("target_state_setter: Auto");
       break;
@@ -207,15 +205,13 @@ void my_homekit_loop() {
   if (t > next_heap_millis) {
     // show heap info every 5 seconds
     next_heap_millis = t + 5 * 1000;
-
-    // check the power status readings every 5 seconds
-    updatePowerStatus();
+    LOG_D("AC power is currently: %s", digitalRead(powerStatusPin) ? "ON" : "OFF");
     // LOG_D("Free heap: %d, HomeKit clients: %d",
     //       ESP.getFreeHeap(), arduino_homekit_connected_clients_count());
   }
   if (t > next_report_millis) {
-		// report sensor values every 10 seconds
-		next_report_millis = t + 10 * 1000;
-		report();
-	}
+    // report sensor values every 10 seconds
+    next_report_millis = t + 10 * 1000;
+    report();
+  }
 }
