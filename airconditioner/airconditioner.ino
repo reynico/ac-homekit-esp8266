@@ -20,8 +20,8 @@
 #define LOG_D(fmt, ...)   printf_P(PSTR(fmt "\n") , ##__VA_ARGS__);
 
 // IR settings
-const uint16_t kIrLed = 4;  // ESP8266 GPIO pin to use. Recommended: 4 (D2).
-IRMideaAC ac(kIrLed);  // Set the GPIO to be used to sending the message
+const uint16_t kIrLed = 15; // D4
+IRMideaAC ac(kIrLed);
 
 // Globals
 bool queueCommand = false;
@@ -32,12 +32,11 @@ void flipQueueCommand(bool newState) {
 
 void setup() {
   Serial.begin(115200);
-  wifi_connect(); // in wifi_info.h
-  homekit_storage_reset(); // to remove the previous HomeKit pairing storage when you first run this new HomeKit example
+  wifi_connect();
+  // homekit_storage_reset(); // to remove the previous HomeKit pairing storage when you first run this new HomeKit example
   my_homekit_setup();
   Serial.write("HomeKit setup complete. About to start ac.begin()\n");
   ac.begin();
-  ac.setUseCelsius(false);
 }
 
 void loop() {
