@@ -1,4 +1,3 @@
-
 #include <Arduino.h>
 #include <arduino_homekit_server.h>
 #include "wifi_info.h"
@@ -7,16 +6,18 @@
 #include <ir_Whirlpool.h>
 #include <DHT.h>
 
-
 #define LOG_D(fmt, ...)   printf_P(PSTR(fmt "\n") , ##__VA_ARGS__);
 
 const uint16_t kIrLed = 15; // D4
 IRWhirlpoolAc ac(kIrLed);
 
+int powerStatus = 2;
+
 DHT dht (5, DHT22);
 
 // Globals
 bool queueCommand = false;
+bool off = true;
 void flipQueueCommand(bool newState) {
   Serial.write("Flipping queueCommand to %d\n", newState);
   queueCommand = newState;
@@ -24,12 +25,29 @@ void flipQueueCommand(bool newState) {
 
 void setup() {
   Serial.begin(115200);
+  pinMode(powerStatus, INPUT);
+  digitalWrite(powerStatus, HIGH);
   dht.begin();
   wifi_connect();
   // homekit_storage_reset(); // to remove the previous HomeKit pairing storage when you first run this new HomeKit example
   my_homekit_setup();
   Serial.write("HomeKit setup complete. About to start ac.begin()\n");
   ac.begin();
+  ac.setPowerToggle(false);
+}
+
+void updatePowerStatus() {
+  bool isOn = true;
+  isOn = digitalRead(powerStatus);
+  if (isOn) {
+    off = false;
+  } else {
+    off = true;
+    ac.setPowerToggle(true);
+    ac.send();
+    ac.setPowerToggle(false);
+  }
+  LOG_D("AC power is: %s", isOn ? "ON" : "OFF");
 }
 
 void loop() {
@@ -130,16 +148,6 @@ void rotation_speed_setter(const homekit_value_t value) {
 
   int fanSpeed = 0; // fan mode disabled
   if (newSpeed < 33){
-    fanSpeed = 1;
-  } else if (newSpeed < 66) {
-    fanSpeed = 2;
-  } else {
-    fanSpeed = 3;
-  }
-
-  
-  int fanSpeed = 0;  // fan mode disabled
-  if (newSpeed < 33) {
     fanSpeed = 1;
   } else if (newSpeed < 66) {
     fanSpeed = 2;
