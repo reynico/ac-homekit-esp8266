@@ -6,7 +6,7 @@
 #include <ir_Whirlpool.h>
 #include <DHT.h>
 
-#define LOG_D(fmt, ...)   printf_P(PSTR(fmt "\n") , ##__VA_ARGS__);
+#define LOG_D(fmt, ...) printf_P(PSTR(fmt "\n"), ##__VA_ARGS__);
 
 const uint16_t kIrLed = 15; // D4
 IRWhirlpoolAc ac(kIrLed);
@@ -54,13 +54,18 @@ void loop() {
   my_homekit_loop();
   delay(10);
 
-  if (queueCommand)
-  {
-    Serial.write("Sending AC Command....\n");
+  if (queueCommand) {
+    if (off) {
+      LOG_D("AC is OFF, and needs to be turned on. Set setPowerToggle to true")
+      // ac.setPowerToggle(true);
+      // off = false;
+    }
+    Serial.write("Sending AC Command...\n");
     ac.send();
     flipQueueCommand(false);
+    // ac.setPowerToggle(false);
+    // LOG_D("AC is now ON, set setPowerToggle to false");
   }
-  
 }
 
 // defined in my_accessory.c
@@ -76,8 +81,6 @@ extern "C" homekit_characteristic_t heating_threshold;
 static uint32_t next_heap_millis = 0;
 static uint32_t next_report_millis = 0;
 
-
-// --- Setters
 void cooler_active_setter(const homekit_value_t value) {
   bool oldState = cooler_active.value.bool_value;
   bool state = value.bool_value;
@@ -87,6 +90,7 @@ void cooler_active_setter(const homekit_value_t value) {
 
   if (!state && oldState) {
     LOG_D("As the AC is not active anymore, set off to true.")
+    // off = true;
   }
   flipQueueCommand(true);
 }
@@ -99,6 +103,7 @@ void report() {
 }
 
 void current_state_setter(const homekit_value_t value) {
+  target_state.value = value;
   LOG_D("NO_OP: current_state_setter. Got value %d", value.int_value);
 }
 
@@ -106,7 +111,7 @@ void target_state_setter(const homekit_value_t value) {
   int oldState = target_state.value.int_value;
   int state = value.int_value;
   target_state.value = value;
-
+  
   if (oldState == state) {
     LOG_D("NO_OP: target_state_setter. Got value %d", value.int_value);
     return;
@@ -146,8 +151,8 @@ void rotation_speed_setter(const homekit_value_t value) {
     return;
   }
 
-  int fanSpeed = 0; // fan mode disabled
-  if (newSpeed < 33){
+  int fanSpeed = 0;  // fan mode disabled
+  if (newSpeed < 33) {
     fanSpeed = 1;
   } else if (newSpeed < 66) {
     fanSpeed = 2;
@@ -159,25 +164,22 @@ void rotation_speed_setter(const homekit_value_t value) {
   if (fanSpeed == 0) {
     fanSpeed = 1;
   }
-  
-   LOG_D("ROTATION speed ac value is %d", fanSpeed);
-   ac.setFan(fanSpeed);
-   flipQueueCommand(true);
+
+  LOG_D("ROTATION speed AC value is %d", fanSpeed);
+  ac.setFan(fanSpeed);
+  flipQueueCommand(true);
 }
 
 void cooling_threshold_setter(const homekit_value_t value) {
   float oldTemp = cooling_threshold.value.float_value;
   float temp = value.float_value;
-  cooling_threshold.value = value;  //sync the value
+  cooling_threshold.value = value;
 
   LOG_D("COOLER THRESHOLD was %.2f and is now set to %.2f", oldTemp, temp);
 
   ac.setTemp(temp);
   flipQueueCommand(true);
 }
-
-
-// --- End Setters
 
 void my_homekit_setup() {
   Serial.write("starting my_homekit_setup\n");
@@ -186,17 +188,16 @@ void my_homekit_setup() {
   //HomeKit sever uses the .setter_ex internally, see homekit_accessories_init function.
   //Maybe this is a legacy design issue in the original esp-homekit library,
   //and I have no reason to modify this "feature".
-  
+
   cooler_active.setter = cooler_active_setter;
   current_state.setter = current_state_setter;
   target_state.setter = target_state_setter;
   rotation_speed.setter = rotation_speed_setter;
   cooling_threshold.setter = cooling_threshold_setter;
+  heating_threshold.setter = cooling_threshold_setter;
 
   Serial.write("about to call arduino_homekit_setup\n");
   arduino_homekit_setup(&config);
-
-  //report the switch value HERE to HomeKit if it is changed (e.g. by a physical button)
 
   Serial.write("exiting my_homekit_setup\n");
 }
@@ -207,11 +208,13 @@ void my_homekit_loop() {
   if (t > next_heap_millis) {
     // show heap info every 5 seconds
     next_heap_millis = t + 5 * 1000;
-    LOG_D("Free heap: %d, HomeKit clients: %d",
-        ESP.getFreeHeap(), arduino_homekit_connected_clients_count());
 
+    // check the power status readings every 5 seconds
+    updatePowerStatus();
+    // LOG_D("Free heap: %d, HomeKit clients: %d",
+    //       ESP.getFreeHeap(), arduino_homekit_connected_clients_count());
   }
-    if (t > next_report_millis) {
+  if (t > next_report_millis) {
 		// report sensor values every 10 seconds
 		next_report_millis = t + 10 * 1000;
 		report();
