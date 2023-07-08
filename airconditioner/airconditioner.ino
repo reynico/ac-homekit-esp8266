@@ -4,7 +4,7 @@
 #include "wifi_info.h"
 #include <IRremoteESP8266.h>
 #include <IRsend.h>
-#include <ir_Midea.h>
+#include <ir_Whirlpool.h>
 
 /*
  *  Modified on: 2021-08-10
@@ -21,7 +21,7 @@
 
 // IR settings
 const uint16_t kIrLed = 15; // D4
-IRMideaAC ac(kIrLed);
+IRWhirlpoolAc ac(kIrLed);
 
 // Globals
 bool queueCommand = false;
@@ -68,16 +68,13 @@ static uint32_t next_heap_millis = 0;
 void cooler_active_setter(const homekit_value_t value) {
   bool oldState = cooler_active.value.bool_value;
   bool state = value.bool_value;
-  cooler_active.value = value;  //sync the value
-  
-  LOG_D("ACTIVE was %s and is now set to %s", oldState ? "ON" : "OFF", state ? "ON" : "OFF");
-  
-  if (state) {
-      ac.on();
-  } else {
-      ac.off();
-  }
+  cooler_active.value = value;
 
+  LOG_D("ACTIVE was %s and is now set to %s", oldState ? "ON" : "OFF", state ? "ON" : "OFF");
+
+  if (!state && oldState) {
+    LOG_D("As the AC is not active anymore, set off to true.")
+  }
   flipQueueCommand(true);
 }
 
@@ -90,7 +87,35 @@ void current_state_setter(const homekit_value_t value) {
 }
 
 void target_state_setter(const homekit_value_t value) {
+  int oldState = target_state.value.int_value;
+  int state = value.int_value;
+  target_state.value = value;
+
+  if (oldState == state) {
     LOG_D("NO_OP: target_state_setter. Got value %d", value.int_value);
+    return;
+  }
+
+  switch (value.int_value) {
+    case 0:
+        LOG_D("AC is NOT OFF, but should be OFF. Setting it to OFF")
+        // off = true;
+        LOG_D("target_state_setter: OFF");
+      break;
+    case 1073646594:
+      ac.setMode(kWhirlpoolAcCool);
+      LOG_D("target_state_setter: Cool");
+      break;
+    case 1073646593:
+      ac.setMode(kWhirlpoolAcHeat);
+      LOG_D("target_state_setter: Heat");
+      break;
+    case 1073646592:
+      ac.setMode(kWhirlpoolAcAuto);
+      LOG_D("target_state_setter: Auto");
+      break;
+  }
+  flipQueueCommand(true);
 }
 
 void rotation_speed_setter(const homekit_value_t value) {
@@ -115,12 +140,18 @@ void rotation_speed_setter(const homekit_value_t value) {
   }
 
   
-  // Enable just fan mode if fanSpeed > 0
-  if (fanSpeed == 0) {
-    ac.setMode(kMideaACAuto);
+  int fanSpeed = 0;  // fan mode disabled
+  if (newSpeed < 33) {
+    fanSpeed = 1;
+  } else if (newSpeed < 66) {
+    fanSpeed = 2;
   } else {
-    LOG_D("Enabling fan mode");
-    ac.setMode(kMideaACFan);
+    fanSpeed = 3;
+  }
+
+  // Keep the fan always running
+  if (fanSpeed == 0) {
+    fanSpeed = 1;
   }
   
    LOG_D("ROTATION speed ac value is %d", fanSpeed);
@@ -135,7 +166,7 @@ void cooling_threshold_setter(const homekit_value_t value) {
 
   LOG_D("COOLER THRESHOLD was %.2f and is now set to %.2f", oldTemp, temp);
 
-  ac.setTemp(temp, true);
+  ac.setTemp(temp);
   flipQueueCommand(true);
 }
 
