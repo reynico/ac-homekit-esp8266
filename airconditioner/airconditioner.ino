@@ -45,6 +45,7 @@ void updatePowerStatus() {
     ac.setPowerToggle(true);
     ac.send();
     ac.setPowerToggle(false);
+    ac.send();
   }
 }
 
@@ -85,6 +86,8 @@ void cooler_active_setter(const homekit_value_t value) {
   if (!state && oldState) {
     LOG_D("As the AC is not active anymore, call updatePowerStatus()")
     powerDesiredStatus = false;
+  } else {
+    powerDesiredStatus = true;
   }
   flipQueueCommand(true);
 }
@@ -120,16 +123,19 @@ void target_state_setter(const homekit_value_t value) {
     case 1073646594:
       powerDesiredStatus = true;
       ac.setMode(kWhirlpoolAcCool);
+      ac.setTemp(22);
       LOG_D("target_state_setter: Cool");
       break;
     case 1073646593:
       powerDesiredStatus = true;
       ac.setMode(kWhirlpoolAcHeat);
+      ac.setTemp(22);
       LOG_D("target_state_setter: Heat");
       break;
     case 1073646592:
       powerDesiredStatus = true;
       ac.setMode(kWhirlpoolAcAuto);
+      ac.setTemp(22);
       LOG_D("target_state_setter: Auto");
       break;
   }
@@ -205,7 +211,14 @@ void my_homekit_loop() {
   if (t > next_heap_millis) {
     // show heap info every 5 seconds
     next_heap_millis = t + 5 * 1000;
-    LOG_D("AC power is currently: %s", digitalRead(powerStatusPin) ? "ON" : "OFF");
+    // cooler_active_getter();
+    powerCurrentStatus = digitalRead(powerStatusPin);
+    LOG_D("AC power is currently: %s", powerCurrentStatus ? "ON" : "OFF");
+    if (powerDesiredStatus != powerCurrentStatus) {
+      LOG_D("Notify HomeKit that the AC is currently: %s", powerCurrentStatus ? "ON" : "OFF");
+      cooler_active.value = HOMEKIT_BOOL(1);
+      homekit_characteristic_notify(&cooler_active, cooler_active.value); // State = auto
+    }
     // LOG_D("Free heap: %d, HomeKit clients: %d",
     //       ESP.getFreeHeap(), arduino_homekit_connected_clients_count());
   }
