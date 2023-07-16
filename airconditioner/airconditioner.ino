@@ -12,6 +12,7 @@ const uint16_t kIrLed = 15;  // D4
 IRWhirlpoolAc ac(kIrLed);
 
 int powerStatusPin = 12;  // D9
+int resetPin = 4;         // D7
 bool powerCurrentStatus = false;
 bool powerDesiredStatus = false;
 
@@ -28,8 +29,14 @@ void flipQueueCommand(bool newState) {
 void setup() {
   Serial.begin(115200);
   pinMode(powerStatusPin, INPUT_PULLUP);
+  pinMode(resetPin, INPUT_PULLUP);
   dht.begin();
   wifi_connect();
+  if (!digitalRead(resetPin)) {
+    Serial.println("Reset is ON, resetting status");
+    homekit_storage_reset();
+    Serial.println("Reset done, continue");
+  }
   // homekit_storage_reset(); // to remove the previous HomeKit pairing storage when you first run this new HomeKit example
   my_homekit_setup();
   Serial.write("HomeKit setup complete. About to start ac.begin()\n");
@@ -94,6 +101,10 @@ void cooler_active_setter(const homekit_value_t value) {
 
 void report() {
   float temperature_value = dht.readTemperature();
+  if (isnan(temperature_value)) {
+    LOG_D("Error while reading DHT temperature, defaulting to 20.0");
+    temperature_value = 20.0;
+  }
   current_temp.value.float_value = temperature_value;
   LOG_D("Current temperature: %.1f", temperature_value);
   homekit_characteristic_notify(&current_temp, current_temp.value);
@@ -209,15 +220,13 @@ void my_homekit_loop() {
   arduino_homekit_loop();
   const uint32_t t = millis();
   if (t > next_heap_millis) {
-    // show heap info every 5 seconds
-    next_heap_millis = t + 5 * 1000;
-    // cooler_active_getter();
+    next_heap_millis = t + 1 * 1000;
     powerCurrentStatus = digitalRead(powerStatusPin);
     LOG_D("AC power is currently: %s", powerCurrentStatus ? "ON" : "OFF");
     if (powerDesiredStatus != powerCurrentStatus) {
       LOG_D("Notify HomeKit that the AC is currently: %s", powerCurrentStatus ? "ON" : "OFF");
-      cooler_active.value = HOMEKIT_BOOL(1);
-      homekit_characteristic_notify(&cooler_active, cooler_active.value); // State = auto
+      cooler_active.value.bool_value = powerCurrentStatus;
+      homekit_characteristic_notify(&cooler_active, cooler_active.value);
     }
     // LOG_D("Free heap: %d, HomeKit clients: %d",
     //       ESP.getFreeHeap(), arduino_homekit_connected_clients_count());
