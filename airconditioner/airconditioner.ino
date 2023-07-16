@@ -15,6 +15,7 @@ int powerStatusPin = 12;  // D9
 int resetPin = 4;         // D7
 bool powerCurrentStatus = false;
 bool powerDesiredStatus = false;
+bool powerCurrentStatusNotified = false;
 
 DHT dht(5, DHT22);
 
@@ -45,7 +46,7 @@ void setup() {
 }
 
 void updatePowerStatus() {
-  powerCurrentStatus = digitalRead(powerStatusPin);
+  powerCurrentStatus = !digitalRead(powerStatusPin);
   LOG_D("AC power is currently: %s, and desired: %s", powerCurrentStatus ? "ON" : "OFF", powerDesiredStatus ? "ON" : "OFF");
   if (powerCurrentStatus != powerDesiredStatus) {
     LOG_D("Toggling power");
@@ -220,13 +221,14 @@ void my_homekit_loop() {
   arduino_homekit_loop();
   const uint32_t t = millis();
   if (t > next_heap_millis) {
-    next_heap_millis = t + 1 * 1000;
-    powerCurrentStatus = digitalRead(powerStatusPin);
+    next_heap_millis = t + 1 * 5000;
+    powerCurrentStatus = !digitalRead(powerStatusPin);
     LOG_D("AC power is currently: %s", powerCurrentStatus ? "ON" : "OFF");
-    if (powerDesiredStatus != powerCurrentStatus) {
+    if (powerCurrentStatusNotified != powerCurrentStatus) {
       LOG_D("Notify HomeKit that the AC is currently: %s", powerCurrentStatus ? "ON" : "OFF");
       cooler_active.value.bool_value = powerCurrentStatus;
       homekit_characteristic_notify(&cooler_active, cooler_active.value);
+      powerCurrentStatusNotified = powerCurrentStatus;
     }
     // LOG_D("Free heap: %d, HomeKit clients: %d",
     //       ESP.getFreeHeap(), arduino_homekit_connected_clients_count());
