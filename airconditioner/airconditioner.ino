@@ -5,6 +5,8 @@
 #include <IRsend.h>
 #include <ir_Whirlpool.h>
 #include <DHT.h>
+#include <ESP8266HTTPClient.h>
+#include <WiFiClient.h>
 
 #define LOG_D(fmt, ...) printf_P(PSTR(fmt "\n"), ##__VA_ARGS__);
 
@@ -16,6 +18,8 @@ int resetPin = 4;         // D7
 bool powerCurrentStatus = false;
 bool powerDesiredStatus = false;
 bool powerCurrentStatusNotified = false;
+
+const char* prometheusServerAddress = "http://monitoring.home:9091/metrics/job/temperature/room/living_room";
 
 DHT dht(5, DHT22);
 
@@ -102,13 +106,16 @@ void cooler_active_setter(const homekit_value_t value) {
 
 void report() {
   float temperature_value = dht.readTemperature();
+  float humidity_value = dht.readHumidity();
   if (isnan(temperature_value)) {
-    LOG_D("Error while reading DHT temperature, defaulting to 20.0");
+    LOG_D("Error while reading DHT temperature and humidity, defaulting to 20.0");
     temperature_value = 20.0;
+    humidity_value = 20.0;
   }
   current_temp.value.float_value = temperature_value;
   LOG_D("Current temperature: %.1f", temperature_value);
   homekit_characteristic_notify(&current_temp, current_temp.value);
+  prometheus_report(temperature_value, humidity_value);
 }
 
 void current_state_setter(const homekit_value_t value) {
@@ -238,4 +245,15 @@ void my_homekit_loop() {
     next_report_millis = t + 10 * 1000;
     report();
   }
+}
+
+void prometheus_report(float temperature, float humidity) {
+  String data = "temperature_c " + String(temperature) + "\n";
+  data += "humidity_percent " + String(humidity) + "\n";
+  WiFiClient client;
+  HTTPClient http;
+  http.begin(client, prometheusServerAddress);
+  int httpResponseCode = http.POST(data);
+  LOG_D("Prometheus HTTP Response code: %d", httpResponseCode);
+  http.end();
 }
