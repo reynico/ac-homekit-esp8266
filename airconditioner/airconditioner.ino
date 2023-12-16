@@ -15,7 +15,6 @@ IRWhirlpoolAc ac(kIrLed);
 
 int powerStatusPin = 12;  // D9
 int resetPin = 4;         // D7
-bool powerCurrentStatus = false;
 bool powerDesiredStatus = false;
 bool powerCurrentStatusNotified = false;
 
@@ -25,54 +24,69 @@ DHT dht(5, DHT22);
 
 // Globals
 bool queueCommand = false;
+bool powerCurrentStatus = false;  // true when the AC is on
 bool off = true;
-void flipQueueCommand(bool newState) {
-  Serial.write("Flipping queueCommand to %d\n", newState);
-  queueCommand = newState;
-}
 
 void setup() {
   Serial.begin(115200);
-  pinMode(powerStatusPin, INPUT_PULLUP);
+  pinMode(powerStatusPin, INPUT);
   pinMode(resetPin, INPUT_PULLUP);
   dht.begin();
   wifi_connect();
   if (!digitalRead(resetPin)) {
-    Serial.println("Reset is ON, resetting status");
+    LOG_D("Reset button is ON, resetting status");
     homekit_storage_reset();
-    Serial.println("Reset done, continue");
+    LOG_D("Reset done, continue");
   }
-  // homekit_storage_reset(); // to remove the previous HomeKit pairing storage when you first run this new HomeKit example
   my_homekit_setup();
   Serial.write("HomeKit setup complete. About to start ac.begin()\n");
   ac.begin();
-  ac.setPowerToggle(false);
+}
+
+void flipQueueCommand(bool newState) {
+  LOG_D("Flipping queueCommand to %d\n", newState);
+  queueCommand = newState;
+}
+
+
+void setPowerCurrentStatus() {
+  int readings[3];
+
+  for (int i = 0; i < 3; i++) {
+    readings[i] = !digitalRead(powerStatusPin);
+    delay(10);  // Add a small delay to stabilize readings
+  }
+
+  if (readings[0] + readings[1] + readings[2] >= 2) {
+    powerCurrentStatus = true;
+  } else {
+    powerCurrentStatus = false;
+  }
+
+  LOG_D("AC power current status: %s", powerCurrentStatus ? "ON" : "OFF");
 }
 
 void updatePowerStatus() {
-  powerCurrentStatus = !digitalRead(powerStatusPin);
-  LOG_D("AC power is currently: %s, and desired: %s", powerCurrentStatus ? "ON" : "OFF", powerDesiredStatus ? "ON" : "OFF");
+  LOG_D("AC power desired status: %s", powerDesiredStatus ? "ON" : "OFF");
   if (powerCurrentStatus != powerDesiredStatus) {
     LOG_D("Toggling power");
     ac.setPowerToggle(true);
     ac.send();
-    ac.setPowerToggle(false);
-    ac.send();
   }
+  ac.setPowerToggle(false);
+  setPowerCurrentStatus();
 }
 
 void loop() {
   my_homekit_loop();
-  delay(10);
 
   if (queueCommand) {
-    updatePowerStatus();
-    Serial.write("Sending AC Command...\n");
+    LOG_D("Sending AC Command...");
     ac.send();
     flipQueueCommand(false);
-    // ac.setPowerToggle(false);
-    // LOG_D("AC is now ON, set setPowerToggle to false");
   }
+
+  delay(10);
 }
 
 // defined in my_accessory.c
@@ -91,31 +105,29 @@ static uint32_t next_report_millis = 0;
 void cooler_active_setter(const homekit_value_t value) {
   bool oldState = cooler_active.value.bool_value;
   bool state = value.bool_value;
+  setPowerCurrentStatus();
   cooler_active.value = value;
 
-  LOG_D("ACTIVE was %s and is now set to %s", oldState ? "ON" : "OFF", state ? "ON" : "OFF");
+  LOG_D("Cooler active setter was %s and is now set to %s. The current power status is %s.", oldState ? "ON" : "OFF", state ? "ON" : "OFF", powerCurrentStatus ? "ON" : "OFF");
 
-  if (!state && oldState) {
-    LOG_D("As the AC is not active anymore, call updatePowerStatus()")
+  if (oldState != powerCurrentStatus) {
+    LOG_D("There is a mismatch between the oldState: %s and the power current status: %s. Fixing", oldState ? "ON" : "OFF", powerCurrentStatus ? "ON" : "OFF");
+    oldState = powerCurrentStatus;
+  }
+
+  if (oldState && !state) {
+    // AC is currently on, but the state asks to power it off
     powerDesiredStatus = false;
-  } else {
+    updatePowerStatus();
+    flipQueueCommand(true);
+  } else if (!oldState && state) {
+    // AC is currently off, but the state asks to power it on
     powerDesiredStatus = true;
+    updatePowerStatus();
+    flipQueueCommand(true);
+  } else if (!oldState && !state) {
+    // AC is currently off, and should be kept off
   }
-  flipQueueCommand(true);
-}
-
-void report() {
-  float temperature_value = dht.readTemperature();
-  float humidity_value = dht.readHumidity();
-  if (isnan(temperature_value)) {
-    LOG_D("Error while reading DHT temperature and humidity, defaulting to 20.0");
-    temperature_value = 20.0;
-    humidity_value = 20.0;
-  }
-  current_temp.value.float_value = temperature_value;
-  LOG_D("Current temperature: %.1f", temperature_value);
-  homekit_characteristic_notify(&current_temp, current_temp.value);
-  prometheus_report(temperature_value, humidity_value);
 }
 
 void current_state_setter(const homekit_value_t value) {
@@ -158,6 +170,7 @@ void target_state_setter(const homekit_value_t value) {
       LOG_D("target_state_setter: Auto");
       break;
   }
+  updatePowerStatus();
   flipQueueCommand(true);
 }
 
@@ -204,12 +217,7 @@ void cooling_threshold_setter(const homekit_value_t value) {
 }
 
 void my_homekit_setup() {
-  Serial.write("starting my_homekit_setup\n");
-  //Add the .setter function to get the switch-event sent from iOS Home APP.
-  //The .setter should be added before arduino_homekit_setup.
-  //HomeKit sever uses the .setter_ex internally, see homekit_accessories_init function.
-  //Maybe this is a legacy design issue in the original esp-homekit library,
-  //and I have no reason to modify this "feature".
+  LOG_D("starting my_homekit_setup\n");
 
   cooler_active.setter = cooler_active_setter;
   current_state.setter = current_state_setter;
@@ -218,10 +226,10 @@ void my_homekit_setup() {
   cooling_threshold.setter = cooling_threshold_setter;
   heating_threshold.setter = cooling_threshold_setter;
 
-  Serial.write("about to call arduino_homekit_setup\n");
+  LOG_D("about to call arduino_homekit_setup\n");
   arduino_homekit_setup(&config);
 
-  Serial.write("exiting my_homekit_setup\n");
+  LOG_D("exiting my_homekit_setup\n");
 }
 
 void my_homekit_loop() {
@@ -229,7 +237,7 @@ void my_homekit_loop() {
   const uint32_t t = millis();
   if (t > next_heap_millis) {
     next_heap_millis = t + 1 * 5000;
-    powerCurrentStatus = !digitalRead(powerStatusPin);
+    setPowerCurrentStatus();
     LOG_D("AC power is currently: %s", powerCurrentStatus ? "ON" : "OFF");
     if (powerCurrentStatusNotified != powerCurrentStatus) {
       LOG_D("Notify HomeKit that the AC is currently: %s", powerCurrentStatus ? "ON" : "OFF");
@@ -246,6 +254,21 @@ void my_homekit_loop() {
     report();
   }
 }
+
+void report() {
+  float temperature_value = dht.readTemperature();
+  float humidity_value = dht.readHumidity();
+  if (isnan(temperature_value)) {
+    LOG_D("Error while reading DHT temperature and humidity, defaulting to 20.0");
+    temperature_value = 20.0;
+    humidity_value = 20.0;
+  }
+  current_temp.value.float_value = temperature_value;
+  LOG_D("Current temperature: %.1f", temperature_value);
+  homekit_characteristic_notify(&current_temp, current_temp.value);
+  prometheus_report(temperature_value, humidity_value);
+}
+
 
 void prometheus_report(float temperature, float humidity) {
   String data = "temperature_c " + String(temperature) + "\n";
