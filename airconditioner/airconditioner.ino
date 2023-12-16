@@ -154,19 +154,16 @@ void target_state_setter(const homekit_value_t value) {
     case 1073646594:
       powerDesiredStatus = true;
       ac.setMode(kWhirlpoolAcCool);
-      ac.setTemp(22);
       LOG_D("target_state_setter: Cool");
       break;
     case 1073646593:
       powerDesiredStatus = true;
       ac.setMode(kWhirlpoolAcHeat);
-      ac.setTemp(22);
       LOG_D("target_state_setter: Heat");
       break;
     case 1073646592:
       powerDesiredStatus = true;
       ac.setMode(kWhirlpoolAcAuto);
-      ac.setTemp(22);
       LOG_D("target_state_setter: Auto");
       break;
   }
@@ -186,7 +183,7 @@ void rotation_speed_setter(const homekit_value_t value) {
     return;
   }
 
-  int fanSpeed = 0;  // fan mode disabled
+  int fanSpeed = 0;  // fan mode auto
   if (newSpeed < 33) {
     fanSpeed = 1;
   } else if (newSpeed < 66) {
@@ -216,6 +213,17 @@ void cooling_threshold_setter(const homekit_value_t value) {
   flipQueueCommand(true);
 }
 
+void heating_threshold_setter(const homekit_value_t value) {
+  float oldTemp = heating_threshold.value.float_value;
+  float temp = value.float_value;
+  heating_threshold.value = value;
+
+  LOG_D("COOLER THRESHOLD was %.2f and is now set to %.2f", oldTemp, temp);
+
+  ac.setTemp(temp);
+  flipQueueCommand(true);
+}
+
 void my_homekit_setup() {
   LOG_D("starting my_homekit_setup\n");
 
@@ -224,7 +232,7 @@ void my_homekit_setup() {
   target_state.setter = target_state_setter;
   rotation_speed.setter = rotation_speed_setter;
   cooling_threshold.setter = cooling_threshold_setter;
-  heating_threshold.setter = cooling_threshold_setter;
+  heating_threshold.setter = heating_threshold_setter;
 
   LOG_D("about to call arduino_homekit_setup\n");
   arduino_homekit_setup(&config);
