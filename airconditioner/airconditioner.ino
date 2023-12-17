@@ -26,7 +26,7 @@ bool power_current_status = false;  // true when the AC is on
 bool power_desired_status = false;
 bool power_current_status_notified = false;
 bool off = true;
-String ac_mode = "off";
+String ac_mode = "0";
 
 void setup() {
   Serial.begin(115200);
@@ -150,24 +150,24 @@ void target_state_setter(const homekit_value_t value) {
     case 0:
       LOG_D("AC is NOT OFF, but should be OFF. Setting it to OFF")
       power_desired_status = false;
-      ac_mode = "off";
+      ac_mode = "0";
       LOG_D("target_state_setter: OFF");
       break;
     case 1073646594:
       power_desired_status = true;
-      ac_mode = "cool";
+      ac_mode = "1";
       ac.setMode(kWhirlpoolAcCool);
       LOG_D("target_state_setter: Cool");
       break;
     case 1073646593:
       power_desired_status = true;
-      ac_mode = "heat";
+      ac_mode = "2";
       ac.setMode(kWhirlpoolAcHeat);
       LOG_D("target_state_setter: Heat");
       break;
     case 1073646592:
       power_desired_status = true;
-      ac_mode = "auto";
+      ac_mode = "3";
       ac.setMode(kWhirlpoolAcAuto);
       LOG_D("target_state_setter: Auto");
       break;
@@ -287,8 +287,8 @@ void prometheus_report(float temperature, float humidity) {
   String ac_on = power_current_status ? "1" : "0";
   String data = "temperature_c " + String(temperature) + "\n";
   data += "humidity_percent " + String(humidity) + "\n";
-  data += "ac_on " + ac_on + "\n";
-  data += "ac_mode " + ac_mode + "\n";
+  data += "ac_on " + String(ac_on) + "\n";
+  data += "ac_mode " + String(ac_mode) + "\n";
   WiFiClient client;
   HTTPClient http;
   http.begin(client, prometheus_server_address);
