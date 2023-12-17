@@ -185,16 +185,16 @@ void rotation_speed_setter(const homekit_value_t value) {
 
   int fanSpeed = 0;  // fan mode auto
   if (newSpeed < 33) {
-    fanSpeed = 1;
+    fanSpeed = 3; // turns out that the speed index is inverted, 3 is min, 1 is max.
   } else if (newSpeed < 66) {
     fanSpeed = 2;
   } else {
-    fanSpeed = 3;
+    fanSpeed = 1;
   }
 
-  // Keep the fan always running
+  // When in automatatic, keep the fan in low speed
   if (fanSpeed == 0) {
-    fanSpeed = 1;
+    fanSpeed = 3;
   }
 
   LOG_D("ROTATION speed AC value is %d", fanSpeed);
