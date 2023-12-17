@@ -10,31 +10,31 @@
 
 #define LOG_D(fmt, ...) printf_P(PSTR(fmt "\n"), ##__VA_ARGS__);
 
-const uint16_t kIrLed = 15;  // D4
-IRWhirlpoolAc ac(kIrLed);
+const uint16_t ir_led_pin = 15;  // D4
+IRWhirlpoolAc ac(ir_led_pin);
 
-int powerStatusPin = 12;  // D9
-int resetPin = 4;         // D7
-bool powerDesiredStatus = false;
-bool powerCurrentStatusNotified = false;
+int power_status_pin = 12;  // D9
+int reset_pin = 4;         // D7
 
-const char* prometheusServerAddress = "http://monitoring.home:9091/metrics/job/temperature/room/living_room";
+const char* prometheus_server_address = "http://monitoring.home:9091/metrics/job/temperature/room/living_room";
 
 DHT dht(5, DHT22);
 
 // Globals
-bool queueCommand = false;
-bool powerCurrentStatus = false;  // true when the AC is on
+bool queue_command = false;
+bool power_current_status = false;  // true when the AC is on
+bool power_desired_status = false;
+bool power_current_status_notified = false;
 bool off = true;
 String ac_mode = "off";
 
 void setup() {
   Serial.begin(115200);
-  pinMode(powerStatusPin, INPUT);
-  pinMode(resetPin, INPUT_PULLUP);
+  pinMode(power_status_pin, INPUT);
+  pinMode(reset_pin, INPUT_PULLUP);
   dht.begin();
   wifi_connect();
-  if (!digitalRead(resetPin)) {
+  if (!digitalRead(reset_pin)) {
     LOG_D("Reset button is ON, resetting status");
     homekit_storage_reset();
     LOG_D("Reset done, continue");
@@ -44,47 +44,47 @@ void setup() {
   ac.begin();
 }
 
-void flipQueueCommand(bool newState) {
-  LOG_D("Flipping queueCommand to %d\n", newState);
-  queueCommand = newState;
+void flip_queue_command(bool new_state) {
+  LOG_D("Flipping queueCommand to %d\n", new_state);
+  queue_command = new_state;
 }
 
 
-void setPowerCurrentStatus() {
+void set_power_current_status() {
   int readings[3];
 
   for (int i = 0; i < 3; i++) {
-    readings[i] = !digitalRead(powerStatusPin);
+    readings[i] = !digitalRead(power_status_pin);
     delay(10);  // Add a small delay to stabilize readings
   }
 
   if (readings[0] + readings[1] + readings[2] >= 2) {
-    powerCurrentStatus = true;
+    power_current_status = true;
   } else {
-    powerCurrentStatus = false;
+    power_current_status = false;
   }
 
-  LOG_D("AC power current status: %s", powerCurrentStatus ? "ON" : "OFF");
+  LOG_D("AC power current status: %s", power_current_status ? "ON" : "OFF");
 }
 
-void updatePowerStatus() {
-  LOG_D("AC power desired status: %s", powerDesiredStatus ? "ON" : "OFF");
-  if (powerCurrentStatus != powerDesiredStatus) {
+void update_power_status() {
+  LOG_D("AC power desired status: %s", power_desired_status ? "ON" : "OFF");
+  if (power_current_status != power_desired_status) {
     LOG_D("Toggling power");
     ac.setPowerToggle(true);
     ac.send();
   }
   ac.setPowerToggle(false);
-  setPowerCurrentStatus();
+  set_power_current_status();
 }
 
 void loop() {
   my_homekit_loop();
 
-  if (queueCommand) {
+  if (queue_command) {
     LOG_D("Sending AC Command...");
     ac.send();
-    flipQueueCommand(false);
+    flip_queue_command(false);
   }
 
   delay(10);
@@ -104,29 +104,29 @@ static uint32_t next_heap_millis = 0;
 static uint32_t next_report_millis = 0;
 
 void cooler_active_setter(const homekit_value_t value) {
-  bool oldState = cooler_active.value.bool_value;
+  bool old_state = cooler_active.value.bool_value;
   bool state = value.bool_value;
-  setPowerCurrentStatus();
+  set_power_current_status();
   cooler_active.value = value;
 
-  LOG_D("Cooler active setter was %s and is now set to %s. The current power status is %s.", oldState ? "ON" : "OFF", state ? "ON" : "OFF", powerCurrentStatus ? "ON" : "OFF");
+  LOG_D("Cooler active setter was %s and is now set to %s. The current power status is %s.", old_state ? "ON" : "OFF", state ? "ON" : "OFF", power_current_status ? "ON" : "OFF");
 
-  if (oldState != powerCurrentStatus) {
-    LOG_D("There is a mismatch between the oldState: %s and the power current status: %s. Fixing", oldState ? "ON" : "OFF", powerCurrentStatus ? "ON" : "OFF");
-    oldState = powerCurrentStatus;
+  if (old_state != power_current_status) {
+    LOG_D("There is a mismatch between the oldState: %s and the power current status: %s. Fixing", old_state ? "ON" : "OFF", power_current_status ? "ON" : "OFF");
+    old_state = power_current_status;
   }
 
-  if (oldState && !state) {
+  if (old_state && !state) {
     // AC is currently on, but the state asks to power it off
-    powerDesiredStatus = false;
-    updatePowerStatus();
-    flipQueueCommand(true);
-  } else if (!oldState && state) {
+    power_desired_status = false;
+    update_power_status();
+    flip_queue_command(true);
+  } else if (!old_state && state) {
     // AC is currently off, but the state asks to power it on
-    powerDesiredStatus = true;
-    updatePowerStatus();
-    flipQueueCommand(true);
-  } else if (!oldState && !state) {
+    power_desired_status = true;
+    update_power_status();
+    flip_queue_command(true);
+  } else if (!old_state && !state) {
     // AC is currently off, and should be kept off
   }
 }
@@ -137,11 +137,11 @@ void current_state_setter(const homekit_value_t value) {
 }
 
 void target_state_setter(const homekit_value_t value) {
-  int oldState = target_state.value.int_value;
+  int old_state = target_state.value.int_value;
   int state = value.int_value;
   target_state.value = value;
 
-  if (oldState == state) {
+  if (old_state == state) {
     LOG_D("NO_OP: target_state_setter. Got value %d", value.int_value);
     return;
   }
@@ -149,62 +149,62 @@ void target_state_setter(const homekit_value_t value) {
   switch (value.int_value) {
     case 0:
       LOG_D("AC is NOT OFF, but should be OFF. Setting it to OFF")
-      powerDesiredStatus = false;
+      power_desired_status = false;
       ac_mode = "off";
       LOG_D("target_state_setter: OFF");
       break;
     case 1073646594:
-      powerDesiredStatus = true;
+      power_desired_status = true;
       ac_mode = "cool";
       ac.setMode(kWhirlpoolAcCool);
       LOG_D("target_state_setter: Cool");
       break;
     case 1073646593:
-      powerDesiredStatus = true;
+      power_desired_status = true;
       ac_mode = "heat";
       ac.setMode(kWhirlpoolAcHeat);
       LOG_D("target_state_setter: Heat");
       break;
     case 1073646592:
-      powerDesiredStatus = true;
+      power_desired_status = true;
       ac_mode = "auto";
       ac.setMode(kWhirlpoolAcAuto);
       LOG_D("target_state_setter: Auto");
       break;
   }
-  updatePowerStatus();
-  flipQueueCommand(true);
+  update_power_status();
+  flip_queue_command(true);
 }
 
 void rotation_speed_setter(const homekit_value_t value) {
-  float oldSpeed = rotation_speed.value.float_value;
-  float newSpeed = value.float_value;
+  float old_speed = rotation_speed.value.float_value;
+  float new_speed = value.float_value;
   rotation_speed.value = value;  // sync the value
 
-  LOG_D("ROTATION SPEED was %.2f and is now set to %.2f", oldSpeed, newSpeed);
+  LOG_D("ROTATION SPEED was %.2f and is now set to %.2f", old_speed, new_speed);
 
-  if (oldSpeed == newSpeed) {
+  if (old_speed == new_speed) {
     LOG_D("Rotation speed NO-OP");
     return;
   }
 
-  int fanSpeed = 0;  // fan mode auto
-  if (newSpeed < 33) {
-    fanSpeed = 3;  // turns out that the speed index is inverted, 3 is min, 1 is max.
-  } else if (newSpeed < 66) {
-    fanSpeed = 2;
+  int fan_speed = 0;  // fan mode auto
+  if (new_speed < 33) {
+    fan_speed = 3;  // turns out that the speed index is inverted, 3 is min, 1 is max.
+  } else if (new_speed < 66) {
+    fan_speed = 2;
   } else {
-    fanSpeed = 1;
+    fan_speed = 1;
   }
 
   // When in automatatic, keep the fan in low speed
-  if (fanSpeed == 0) {
-    fanSpeed = 3;
+  if (fan_speed == 0) {
+    fan_speed = 3;
   }
 
-  LOG_D("ROTATION speed AC value is %d", fanSpeed);
-  ac.setFan(fanSpeed);
-  flipQueueCommand(true);
+  LOG_D("ROTATION speed AC value is %d", fan_speed);
+  ac.setFan(fan_speed);
+  flip_queue_command(true);
 }
 
 void cooling_threshold_setter(const homekit_value_t value) {
@@ -215,7 +215,7 @@ void cooling_threshold_setter(const homekit_value_t value) {
   LOG_D("COOLER THRESHOLD was %.2f and is now set to %.2f", oldTemp, temp);
 
   ac.setTemp(temp);
-  flipQueueCommand(true);
+  flip_queue_command(true);
 }
 
 void heating_threshold_setter(const homekit_value_t value) {
@@ -226,7 +226,7 @@ void heating_threshold_setter(const homekit_value_t value) {
   LOG_D("COOLER THRESHOLD was %.2f and is now set to %.2f", oldTemp, temp);
 
   ac.setTemp(temp);
-  flipQueueCommand(true);
+  flip_queue_command(true);
 }
 
 void my_homekit_setup() {
@@ -250,13 +250,13 @@ void my_homekit_loop() {
   const uint32_t t = millis();
   if (t > next_heap_millis) {
     next_heap_millis = t + 1 * 5000;
-    setPowerCurrentStatus();
-    LOG_D("AC power is currently: %s", powerCurrentStatus ? "ON" : "OFF");
-    if (powerCurrentStatusNotified != powerCurrentStatus) {
-      LOG_D("Notify HomeKit that the AC is currently: %s", powerCurrentStatus ? "ON" : "OFF");
-      cooler_active.value.bool_value = powerCurrentStatus;
+    set_power_current_status();
+    LOG_D("AC power is currently: %s", power_current_status ? "ON" : "OFF");
+    if (power_current_status_notified != power_current_status) {
+      LOG_D("Notify HomeKit that the AC is currently: %s", power_current_status ? "ON" : "OFF");
+      cooler_active.value.bool_value = power_current_status;
       homekit_characteristic_notify(&cooler_active, cooler_active.value);
-      powerCurrentStatusNotified = powerCurrentStatus;
+      power_current_status_notified = power_current_status;
     }
     // LOG_D("Free heap: %d, HomeKit clients: %d",
     //       ESP.getFreeHeap(), arduino_homekit_connected_clients_count());
@@ -284,15 +284,15 @@ void report() {
 
 
 void prometheus_report(float temperature, float humidity) {
-  String ac_on = powerCurrentStatus ? "1" : "0";
+  String ac_on = power_current_status ? "1" : "0";
   String data = "temperature_c " + String(temperature) + "\n";
   data += "humidity_percent " + String(humidity) + "\n";
   data += "ac_on " + ac_on + "\n";
   data += "ac_mode " + ac_mode + "\n";
   WiFiClient client;
   HTTPClient http;
-  http.begin(client, prometheusServerAddress);
-  int httpResponseCode = http.POST(data);
-  LOG_D("Prometheus HTTP Response code: %d", httpResponseCode);
+  http.begin(client, prometheus_server_address);
+  int http_response_code = http.POST(data);
+  LOG_D("Prometheus HTTP Response code: %d", http_response_code);
   http.end();
 }
