@@ -26,6 +26,7 @@ DHT dht(5, DHT22);
 bool queueCommand = false;
 bool powerCurrentStatus = false;  // true when the AC is on
 bool off = true;
+String ac_mode = "off";
 
 void setup() {
   Serial.begin(115200);
@@ -149,20 +150,24 @@ void target_state_setter(const homekit_value_t value) {
     case 0:
       LOG_D("AC is NOT OFF, but should be OFF. Setting it to OFF")
       powerDesiredStatus = false;
+      ac_mode = "off";
       LOG_D("target_state_setter: OFF");
       break;
     case 1073646594:
       powerDesiredStatus = true;
+      ac_mode = "cool";
       ac.setMode(kWhirlpoolAcCool);
       LOG_D("target_state_setter: Cool");
       break;
     case 1073646593:
       powerDesiredStatus = true;
+      ac_mode = "heat";
       ac.setMode(kWhirlpoolAcHeat);
       LOG_D("target_state_setter: Heat");
       break;
     case 1073646592:
       powerDesiredStatus = true;
+      ac_mode = "auto";
       ac.setMode(kWhirlpoolAcAuto);
       LOG_D("target_state_setter: Auto");
       break;
@@ -174,7 +179,7 @@ void target_state_setter(const homekit_value_t value) {
 void rotation_speed_setter(const homekit_value_t value) {
   float oldSpeed = rotation_speed.value.float_value;
   float newSpeed = value.float_value;
-  rotation_speed.value = value;  //sync the value
+  rotation_speed.value = value;  // sync the value
 
   LOG_D("ROTATION SPEED was %.2f and is now set to %.2f", oldSpeed, newSpeed);
 
@@ -185,7 +190,7 @@ void rotation_speed_setter(const homekit_value_t value) {
 
   int fanSpeed = 0;  // fan mode auto
   if (newSpeed < 33) {
-    fanSpeed = 3; // turns out that the speed index is inverted, 3 is min, 1 is max.
+    fanSpeed = 3;  // turns out that the speed index is inverted, 3 is min, 1 is max.
   } else if (newSpeed < 66) {
     fanSpeed = 2;
   } else {
@@ -279,8 +284,11 @@ void report() {
 
 
 void prometheus_report(float temperature, float humidity) {
+  String ac_on = powerCurrentStatus ? "1" : "0";
   String data = "temperature_c " + String(temperature) + "\n";
   data += "humidity_percent " + String(humidity) + "\n";
+  data += "ac_on " + ac_on + "\n";
+  data += "ac_mode " + ac_mode + "\n";
   WiFiClient client;
   HTTPClient http;
   http.begin(client, prometheusServerAddress);
