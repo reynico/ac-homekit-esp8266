@@ -10,10 +10,10 @@
 
 #define LOG_D(fmt, ...) printf_P(PSTR(fmt "\n"), ##__VA_ARGS__);
 
-const uint16_t ir_led_pin = 15;  // D4
+const uint16_t ir_led_pin = 15;  // Wemos D1, pin D8
 IRWhirlpoolAc ac(ir_led_pin);
 
-int power_status_pin = 12;  // D9
+int power_status_pin = 14;  // Wemos D1, pin D5
 int reset_pin = 4;         // D7
 
 const char* prometheus_server_address = "http://monitoring.home:9091/metrics/job/temperature/room/living_room";
