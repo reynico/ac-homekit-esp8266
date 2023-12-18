@@ -1,7 +1,10 @@
 # Surrey / Whirlpool AC control with Apple Home
-* Remote control unit: `DG11J1-01`
+* Remote control unit: `DG11J1-01`.
+* Exposes metrics to a [Prometheus pushgateway server](https://github.com/prometheus/pushgateway).
 
-Read more at my blog: [controlling-ac-units-apple-home](https://blog.nico.ninja/electronics/diy/controlling-ac-units-apple-home/)
+![AC Control box](case/box-installed.jpg)
+
+Read more at my blog: [Controlling AC Units with Apple Home and Siri](https://blog.nico.ninja/controlling-ac-units-apple-home/)
 
 
 ## External libraries
